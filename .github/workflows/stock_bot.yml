@@ -4,6 +4,8 @@ on:
   schedule:
     # UTC 기준 (한국 시각 오전 8시 30분 = UTC 23:30)
     - cron: "30 23 * * *"
+  push:
+    branches: ["main"]
   workflow_dispatch: # 수동 실행 버튼 활성화
 
 jobs:
