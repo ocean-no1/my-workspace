@@ -1,12 +1,15 @@
-# --- 핵심 데이터 수집 및 분석 ---
+# --- 핵심 AI & 데이터 수집 ---
+google-generativeai==0.3.2  # 구글의 AI 모델(Gemini) 통신
+yfinance==0.2.52            # 미국 주식/환율/금리 데이터
+beautifulsoup4==4.12.3      # 네이버 금융/뉴스 크롤링
+python-dotenv==1.0.1        # API Key 보관
+
+# --- 기존 데이터 분석 ---
 pykrx==1.0.48
-yfinance==0.2.52
 pandas==2.2.3
 OpenDartReader==0.2.3
-google-generativeai==0.3.2
 
 # --- 시스템 및 유틸리티 ---
-python-dotenv==1.0.1
 requests==2.32.3
 schedule==1.2.2
 python-telegram-bot==20.8

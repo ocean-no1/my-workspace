@@ -8,7 +8,7 @@ class Scout:
     """
     시장 데이터를 수집하는 정찰병 역할의 클래스
     - 한국장: PyKRX, OpenDart
-    - 미국장: yfinance
+    - 미국장/Macro: yfinance
     """
     def __init__(self):
         self.dart = OpenDartReader(config.OPENDART_API_KEY)
@@ -24,31 +24,43 @@ class Scout:
         except:
             return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 
-    def collect_data(self, portfolio):
+    def collect_data(self, sectors, macros):
         """
-        포트폴리오 내 모든 종목의 데이터 수집
+        전체 시장 데이터 수집 (종목 + 거시경제)
         """
-        results = {}
+        results = {
+            "sectors": {},
+            "macros": {}
+        }
         kr_date = self._get_kr_trading_date()
-        
         print(f"🕵️ Scout: 시장 데이터 수집 중... (기준일: KR {kr_date})")
 
-        for code, info in portfolio.items():
-            name = info['name']
-            market = info['market']
+        # 1. 섹터별 종목 수집
+        for sector_name, tickers in sectors.items():
+            sector_results = {}
+            for code, name in tickers.items():
+                try:
+                    if code.endswith('.KS') or code.endswith('.KQ'): # 한국장
+                        # PyKRX는 .KS/.KQ 떼고 조회
+                        kr_code = code.split('.')[0]
+                        data = self._collect_kr_stock(kr_code, kr_date)
+                    else: # 미국장
+                        data = self._collect_us_stock(code)
+                    
+                    sector_results[name] = data
+                except Exception as e:
+                    print(f"❌ {name} 수집 실패: {e}")
+                    sector_results[name] = {"error": str(e)}
             
+            results["sectors"][sector_name] = sector_results
+
+        # 2. 거시경제 지표 수집
+        for key, ticker in macros.items():
             try:
-                if market == 'KR':
-                    data = self._collect_kr_stock(code, kr_date)
-                else:
-                    data = self._collect_us_stock(code)
-                
-                results[name] = data
-                
+                results["macros"][key] = self._collect_us_stock(ticker)
             except Exception as e:
-                print(f"❌ {name} 데이터 수집 실패: {e}")
-                results[name] = {"error": str(e)}
-                
+                print(f"❌ Macro {key} 수집 실패: {e}")
+
         return results
 
     def _collect_kr_stock(self, code, date):
@@ -56,10 +68,13 @@ class Scout:
         df_price = stock.get_market_ohlcv(date, date, code)
         df_trade = stock.get_market_trading_value_by_date(date, date, code)
         
+        if df_price.empty:
+            return {"error": "No Pricing Data"}
+
         price = df_price['종가'].values[0]
         change_rate = df_price['등락률'].values[0]
         
-        # 컬럼명 대응 (버전 차이 방지)
+        # 컬럼명 대응
         if '외국인합계' in df_trade.columns:
             f_col = '외국인합계'
         elif '외국인' in df_trade.columns:
@@ -102,9 +117,9 @@ class Scout:
             return {"error": "No Data"}
             
         current = history.iloc[-1]
-        prev = history.iloc[-2]
-        
         price = current['Close']
+        
+        prev = history.iloc[-2]
         change_rate = ((price - prev['Close']) / prev['Close']) * 100
         
         # MA20
@@ -118,7 +133,7 @@ class Scout:
         rsi = 100 - (100 / (1 + rs))
         
         return {
-            "market": "U.S.",
+            "market": "U.S./Macro",
             "price": round(float(price), 2),
             "change_rate": round(float(change_rate), 2),
             "ma20_trend": "Above" if price > ma20 else "Below",
