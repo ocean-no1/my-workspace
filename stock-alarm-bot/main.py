@@ -34,20 +34,39 @@ def get_report_by_time():
         report = brain.analyze_market(market_data)
     else:
         # AI 사용 불가 시 간단 요약 (Fallback)
-        report = "🔌 **[데이터 수집 리포트]** (AI 미연동)\n\n"
+        report = "🔌 **[데이터 수집 리포트]** (AI 미연동 - V16.0)\n\n"
         report += "```\n"
         
-        # 매크로
-        report += "[Macro]\n"
-        for k, v in market_data.get('macros', {}).items():
+        # 1. Macro
+        report += "[Macro Indicators]\n"
+        for k, v in market_data.get('macro', {}).items():
             report += f"{k}: {v}\n"
         
-        # 섹터
-        report += "\n[Sectors]\n"
-        for sector, stocks in market_data.get('sectors', {}).items():
+        # 2. Players (Supply/Demand)
+        report += "\n[Players - Net Buy]\n"
+        players = market_data.get('players', {})
+        if 'this_week' in players:
+            report += f"This Week: {players['this_week']}\n"
+        if 'last_week' in players:
+            report += f"Last Week: {players['last_week']}\n"
+
+        # 3. Policy News
+        report += "\n[Policy News]\n"
+        for kw, info in market_data.get('policy_news', {}).items():
+            report += f"- {kw}: {info.get('title', 'No Title')}\n"
+
+        # 4. Micro (Sectors)
+        report += "\n[Sector Analysis]\n"
+        for sector, stocks in market_data.get('micro', {}).items():
             report += f"\n- {sector}\n"
-            for name, data in stocks.items():
-                report += f"  {name}: {data}\n"
+            if isinstance(stocks, dict):
+                for name, data in stocks.items():
+                    if isinstance(data, dict):
+                        price = data.get('price', 'N/A')
+                        change = data.get('change', 'N/A')
+                        report += f"  {name}: {price} ({change})\n"
+                    else:
+                        report += f"  {name}: {data}\n"
         report += "```"
 
     return report

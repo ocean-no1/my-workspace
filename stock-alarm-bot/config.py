@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==========================================
-# 1. � 섹터 및 종목 설정 (yfinance 호환 티커)
+# 1. 🏭 섹터 및 종목 설정 (yfinance 호환 티커)
 # ==========================================
 # 한국 주식: .KS(코스피), .KQ(코스닥) 접미어 필수
 SECTORS = {
@@ -53,12 +53,22 @@ MACRO_TICKERS = {
 URLS = {
     "DEPOSIT": "https://finance.naver.com/sise/sise_deposit.naver",          # 고객 예탁금
     "INVESTOR_TREND": "https://finance.naver.com/sise/sise_trans_style.naver", # 투자자별 매매동향
+    "PROGRAM_TRADE": "https://finance.naver.com/sise/sise_program.naver",    # 프로그램 매매동향
     "NEWS_LATEST": "https://finance.naver.com/news/mainnews.naver",          # 주요 뉴스
+    "NEWS_SEARCH": "https://search.naver.com/search.naver?where=news&query=", # 뉴스 검색
     "BOK_RATE": "https://www.bok.or.kr"                                      # (참고) 한국은행 기준금리 등
 }
 
 # ==========================================
-# 4. 🧠 AI 프롬프트 설정 (Persona)
+# 4. 📰 뉴스 검색 키워드
+# ==========================================
+NEWS_KEYWORDS = [
+    "금투세", "밸류업", "상속세", "물적분할", "반도체 보조금", # 5대 쟁점
+    "중국 비자", "러시아 전쟁", "엔화 환율"                 # 지정학
+]
+
+# ==========================================
+# 5. 🧠 AI 프롬프트 설정 (Persona)
 # ==========================================
 SYSTEM_ROLE = """
 당신은 '워렌 버핏'의 장기 투자 철학과 '찰리 멍거'의 냉철한 판단력을 겸비한 세계 최고의 투자 전략가입니다.
@@ -77,7 +87,7 @@ SYSTEM_ROLE = """
 """
 
 # ==========================================
-# 5. 🔑 API 키 및 시스템 설정
+# 6. 🔑 API 키 및 시스템 설정
 # ==========================================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
