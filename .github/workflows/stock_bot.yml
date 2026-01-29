@@ -32,6 +32,7 @@ jobs:
           TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
           GOOGLE_API_KEY: "${{ secrets.GOOGLE_API_KEY }}"
           DATA_GO_KR_API_KEY: "${{ secrets.DATA_GO_KR_API_KEY }}"
+          OPENDART_API_KEY: "${{ secrets.OPENDART_API_KEY }}"
         run: |
           cd stock-alarm-bot
           python main.py
