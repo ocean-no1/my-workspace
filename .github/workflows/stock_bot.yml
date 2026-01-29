@@ -3,35 +3,47 @@ name: Stock Alarm Bot
 on:
   schedule:
     # 1. 장전 점검: 한국시간 08:50 (UTC 기준 23:50 전날)
-    # UTC 일요일~목요일 23:50은 한국 월요일~금요일 08:50입니다.
-    - cron: '50 23 * * 0-4'
-    
-    # 2. 장후 결산: 한국시간 15:40 (UTC 기준 06:40 당일)
-    # UTC 월요일~금요일 06:40은 한국 월요일~금요일 15:40입니다.
-    - cron: '40 6 * * 1-5'
+    - cron: "50 23 * * 0-4"
 
-  workflow_dispatch: # 수동 실행 버튼 (테스트용)
+    # 2. 장후 결산: 한국시간 15:40 (UTC 기준 06:40 당일)
+    - cron: "40 6 * * 1-5"
+
+  # ✅ 기존 수동 실행용
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: "Log level"
+        required: false
+        default: "warning"
+
+  # ✅ 외부(텔레그램 봇)에서 신호를 보낼 입구 (여기가 포인트!)
+  repository_dispatch:
+    types: [telegram_trigger]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
+    env:
+      TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
+      TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
+      OPENDART_API_KEY: "${{ secrets.OPENDART_API_KEY }}"
+       steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # 👇 [수정] 파일 앞에 폴더명을 붙여줍니다.
+          pip install -r stock-alarm-bot/requirements.txt
 
       - name: Run Market Analysis
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          OPENDART_API_KEY: ${{ secrets.OPENDART_API_KEY }}
-        run: python main.py
+        run: |
+          # 👇 [수정] 폴더 안으로 들어가서 파이썬을 실행합니다.
+          cd stock-alarm-bot
+          python main.py

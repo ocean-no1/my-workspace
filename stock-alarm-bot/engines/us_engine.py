@@ -1,6 +1,5 @@
 import yfinance as yf
-import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 
 def analyze_us_market(tickers):
     """
@@ -15,7 +14,8 @@ def analyze_us_market(tickers):
             ticker = yf.Ticker(symbol)
             df = ticker.history(period="60d")
             
-            if df.empty: continue
+            if df.empty:
+                continue
 
             # 2. 기술적 지표 계산
             # [이동평균선] 최근 20일간의 평균 가격
