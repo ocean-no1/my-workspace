@@ -25,6 +25,47 @@ logging.basicConfig(
     ]
 )
 
+
+def _generate_basic_report(market_data):
+    """
+    AI 분석 실패 시 제공되는 기본 데이터 리포트 생성기
+    """
+    report = "🔌 **[데이터 수집 리포트]** (AI 미연동 - V16.0)\n\n"
+    report += "```\n"
+    
+    # 1. Macro
+    report += "[Macro Indicators]\n"
+    for k, v in market_data.get('macro', {}).items():
+        report += f"{k}: {v}\n"
+    
+    # 2. Players (Supply/Demand)
+    report += "\n[Players - Net Buy]\n"
+    players = market_data.get('players', {})
+    if 'this_week' in players:
+        report += f"This Week: {players['this_week']}\n"
+    if 'last_week' in players:
+        report += f"Last Week: {players['last_week']}\n"
+
+    # 3. Policy News
+    report += "\n[Policy News]\n"
+    for kw, info in market_data.get('policy_news', {}).items():
+        report += f"- {kw}: {info.get('title', 'No Title')}\n"
+
+    # 4. Micro (Sectors)
+    report += "\n[Sector Analysis]\n"
+    for sector, stocks in market_data.get('micro', {}).items():
+        report += f"\n- {sector}\n"
+        if isinstance(stocks, dict):
+            for name, data in stocks.items():
+                if isinstance(data, dict):
+                    price = data.get('price', 'N/A')
+                    change = data.get('change', 'N/A')
+                    report += f"  {name}: {price} ({change})\n"
+                else:
+                    report += f"  {name}: {data}\n"
+    report += "```"
+    return report
+
 def get_report_by_time():
     """
     시간대별 리포트 생성 로직
@@ -44,7 +85,6 @@ def get_report_by_time():
         ai_available = False
 
     # 1. 데이터 수집 (섹터 전체 + 매크로)
-    # config에 정의된 SECTORS와 MACRO_TICKERS를 모두 전달
     market_data = scout.collect_data(config.SECTORS, config.MACRO_TICKERS)
     logging.info("데이터 수집 완료")
     
@@ -54,40 +94,7 @@ def get_report_by_time():
         report = brain.analyze_market(market_data)
     else:
         # AI 사용 불가 시 간단 요약 (Fallback)
-        report = "🔌 **[데이터 수집 리포트]** (AI 미연동 - V16.0)\n\n"
-        report += "```\n"
-        
-        # 1. Macro
-        report += "[Macro Indicators]\n"
-        for k, v in market_data.get('macro', {}).items():
-            report += f"{k}: {v}\n"
-        
-        # 2. Players (Supply/Demand)
-        report += "\n[Players - Net Buy]\n"
-        players = market_data.get('players', {})
-        if 'this_week' in players:
-            report += f"This Week: {players['this_week']}\n"
-        if 'last_week' in players:
-            report += f"Last Week: {players['last_week']}\n"
-
-        # 3. Policy News
-        report += "\n[Policy News]\n"
-        for kw, info in market_data.get('policy_news', {}).items():
-            report += f"- {kw}: {info.get('title', 'No Title')}\n"
-
-        # 4. Micro (Sectors)
-        report += "\n[Sector Analysis]\n"
-        for sector, stocks in market_data.get('micro', {}).items():
-            report += f"\n- {sector}\n"
-            if isinstance(stocks, dict):
-                for name, data in stocks.items():
-                    if isinstance(data, dict):
-                        price = data.get('price', 'N/A')
-                        change = data.get('change', 'N/A')
-                        report += f"  {name}: {price} ({change})\n"
-                    else:
-                        report += f"  {name}: {data}\n"
-        report += "```"
+        report = _generate_basic_report(market_data)
         logging.warning("AI 분석 실패로 기본 리포트 생성됨")
 
     return report
@@ -109,6 +116,6 @@ if __name__ == "__main__":
         # 텔레그램으로 에러 알림 전송 (가능한 경우)
         try:
             send_message(f"⚠️ **[Bot Error]** 봇 가동 중 에러 발생:\n{str(e)}")
-        except:
+        except Exception:
             pass
         sys.exit(1) # GitHub Actions를 실패(Red) 상태로 종료
