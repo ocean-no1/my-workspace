@@ -1,61 +1,63 @@
 import os
 import datetime
 import pytz
-import requests
-# 1. 호출 명칭 수정: 클래스가 아닌 엔진 파일 내 정의된 함수명을 가져옵니다.
-from engines.kr_engine import analyze_korea_market
-from engines.us_engine import analyze_us_market
-
-# 2. 포트폴리오 설정 (엔진 내부에서 .items()를 사용하므로 딕셔너리 형태 유지)
-KR_PORTFOLIO = {'005930': '삼성전자', '000660': 'SK하이닉스', '035420': 'NAVER'}
-US_PORTFOLIO = {'AAPL': '애플', 'TSLA': '테슬라', 'NVDA': '엔비디아'}
-MARKET_EYE_TEXT = "🔔 **[Market-Eye 전략 리포트]**\n"
-
-def send_message(text):
-    """텔레그램 메시지 전송"""
-    token = os.environ.get('TELEGRAM_TOKEN')
-    chat_id = os.environ.get('TELEGRAM_CHAT_ID')
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
-    try:
-        requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print(f"❌ 전송 에러: {e}")
+import config
+from engines.scout import Scout
+from engines.brain import Brain
+from notifiers.telegram_bot import send_message
 
 def get_report_by_time():
+    """
+    시간대별 리포트 생성 로직
+    - Scout: 데이터 수집
+    - Brain: 분석 및 글쓰기
+    """
     kst = pytz.timezone('Asia/Seoul')
     now = datetime.datetime.now(kst)
     hour = now.hour
 
-    content = ""
-
-    # 🕒 3. 호출 방식 수정: 기존 클래스 메서드 호출 방식에서 함수 직접 호출로 변경
-    if 19 <= hour <= 21:
-        report_title = "🌙 **[Next Day Strategy: 내일의 전략]**\n"
-        content += analyze_korea_market(KR_PORTFOLIO)
-        content += "\n" + analyze_us_market(US_PORTFOLIO)
+    # 1. 포트폴리오 선택
+    if 8 <= hour <= 15: # 장중/장전 (한국장 중심)
+        portfolio = config.ACTIVE_PORTFOLIO
+        portfolio.update(config.SAFE_PORTFOLIO_EXPANDED if hasattr(config, 'SAFE_PORTFOLIO_EXPANDED') else {})
+    else: # 장마감/야간 (전체 + 미국장)
+        portfolio = config.ACTIVE_PORTFOLIO
     
-    elif 8 <= hour <= 9:
-        report_title = "☀️ **[Market Open Check: 장전 최종 점검]**\n"
-        content += "✅ 새벽 미 증시 마감 및 환율/금리 최종 반영 완료\n"
-        content += analyze_us_market(US_PORTFOLIO)
+    # Scout와 Brain 초기화
+    scout = Scout()
+    
+    try:
+        brain = Brain()
+        ai_available = True
+    except Exception as e:
+        print(f"⚠️ AI 초기화 실패 ({e}). 기본 리포트로 전환합니다.")
+        ai_available = False
 
-    elif 10 <= hour <= 11:
-        report_title = "🇨🇳 **[China-Korea Link: 중국 연동 브리핑]**\n"
-        content += "📊 중국 상해/항셍 지수 개장 반영 분석\n"
-        content += analyze_korea_market(KR_PORTFOLIO)
-
+    # 2. 데이터 수집
+    market_data = scout.collect_data(portfolio)
+    
+    # 3. 리포트 생성
+    if ai_available:
+        print("🧠 Brain: AI 분석 시작...")
+        report = brain.analyze_market(market_data)
     else:
-        report_title = "🔄 **[Current Market Status: 현재 시장 상황]**\n"
-        content += analyze_korea_market(KR_PORTFOLIO)
+        # AI 사용 불가 시 간단 요약 (Fallback)
+        report = "🔌 **[데이터 수집 리포트]** (AI 미연동)\n\n"
+        report += "```\n"
+        for name, data in market_data.items():
+            report += f"{name}: {data}\n"
+        report += "```"
 
-    return MARKET_EYE_TEXT + report_title + content
+    return report
 
 if __name__ == "__main__":
-    print("🚀 시장 분석 엔진 가동 (KR + US 통합)...")
+    print(f"🚀 Stock Alarm Bot 시작 (Time: {datetime.datetime.now()})")
+    
     try:
         final_report = get_report_by_time()
+        print("📨 텔레그램 전송 중...")
         send_message(final_report)
-        print("✅ 리포트 전송 완료.")
+        print("✅ 모든 작업 완료.")
+        
     except Exception as e:
-        print(f"❌ 실행 중 에러 발생: {e}")
+        print(f"❌ 치명적 오류 발생: {e}")
