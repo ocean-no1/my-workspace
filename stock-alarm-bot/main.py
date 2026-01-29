@@ -101,8 +101,16 @@ def get_report_by_time():
 
 if __name__ == "__main__":
     try:
+        # [Heartbeat] Diagnostics for GitHub Actions
+        secret_keys = ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID", "GOOGLE_API_KEY", "DATA_GO_KR_API_KEY"]
+        print("🔍 [Diagnostics] Environment Check:")
+        for k in secret_keys:
+            val = os.environ.get(k)
+            status = "OK" if val and len(val) > 5 else "MISSING/INVALID"
+            print(f"  - {k}: {status} (Length: {len(val) if val else 0})")
+
         # [Heartbeat] 생존 신고
-        start_msg = f"🚀 **[System Start]** Stock Alarm Bot V16.1 가동 시작\n- Env: {'Cloud (GitHub)' if os.environ.get('GITHUB_ACTIONS') else 'Local'}\n- Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        start_msg = f"🚀 **[System Start]** Stock Alarm Bot V16.11 가동 시작\n- Env: {'Cloud (GitHub)' if os.environ.get('GITHUB_ACTIONS') else 'Local'}\n- Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         send_message(start_msg)
 
         final_report = get_report_by_time()

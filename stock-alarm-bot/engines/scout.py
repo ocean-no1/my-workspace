@@ -131,8 +131,6 @@ class Scout:
              print(f"    ⚠️ 머니무브 수집 실패: {e}")
              
 
-        return data
-
         return result
 
     def get_risk_indices(self):
@@ -256,6 +254,7 @@ class Scout:
 
     # -------------------------------------------------------------------------
     # 기존 메소드들 (get_macro_data 등) 유지...
+    def get_korea_market_index(self):
         """
         [공공데이터포털] 국내 지수 시세 (KOSPI, KOSDAQ)
         """
