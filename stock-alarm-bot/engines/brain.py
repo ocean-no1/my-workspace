@@ -12,7 +12,9 @@ class Brain:
             raise ValueError("GOOGLE_API_KEY is missing!")
             
         genai.configure(api_key=config.GOOGLE_API_KEY)
-        self.model = genai.GenerativeModel('gemini-pro')
+        # 'gemini-pro' alias might be deprecated or unstable.
+        # Switching to 'gemini-1.5-flash' for speed/stability/math capabilities.
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
 
     def analyze_market(self, market_data):
         """
