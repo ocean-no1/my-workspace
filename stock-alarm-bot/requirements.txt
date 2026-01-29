@@ -8,6 +8,7 @@ python-dotenv==1.0.1        # API Key 보관
 pykrx==1.0.48
 pandas==2.2.3
 OpenDartReader==0.2.3
+pandas_datareader
 
 # --- 시스템 및 유틸리티 ---
 requests==2.32.3

@@ -37,15 +37,32 @@ SECTORS = {
 # ==========================================
 # 2. 🌍 거시경제 지표 (Macro)
 # ==========================================
-# yfinance 티커 기준
+# 매크로 지표 (Key: Name, Value: Ticker/Code)
 MACRO_TICKERS = {
-    "US_10Y": "^TNX",      # 미국채 10년물 금리
-    "US_2Y": "^IRX",       # 미국채 2년물 (주의: yfinance에서 ^IRX는 통상 13주 단기채이나 요청에 따라 매핑)
-    "DX_Y": "DX-Y.NYB",    # 달러 인덱스
-    "GOLD": "GC=F",        # 금 선물
-    "BITCOIN": "BTC-USD",  # 비트코인
-    "WTI": "CL=F"          # (옵션) WTI 원유
+    "USD/KRW": "KRW=X",        # 원/달러 환율
+    "US 10Y Treasury": "^TNX", # 미국채 10년물 금리
+    "WTI Crude": "CL=F",       # 서부 텍사스유
+    "Gold": "GC=F",            # 금 선물
+    "Bitcoin": "BTC-USD"       # 비트코인
 }
+
+# [V16.6] Safe Haven (위기 시 대피처)
+SAFE_HAVEN_TICKERS = {
+    "Inverse 2X": "252670.KS", # KODEX 200선물인버스2X
+    "Gold ETF": "132030.KS",   # KODEX 골드선물(H)
+    "USD ETF": "261240.KS"     # KODEX 미국달러선물
+}
+
+# [V16.6] Crisis Keywords & Weights (Pulse Layer)
+# 가중치: 정치적 쇼크(2.0) vs 경제 노이즈(0.5)
+CRISIS_KEYWORDS = {
+    "계엄": 2.0, "탄핵": 2.0, "내란": 2.0, "헌법": 1.5,
+    "ICE": 1.5, "압수수색": 1.5, "부정선거": 1.5,
+    "금리": 0.5, "환율": 0.5, "고용": 0.5, "생산": 0.5
+}
+
+# 뉴스 검색 키워드 (기존 단순 리스트 대체 가능하나 호환성 유지)
+NEWS_KEYWORDS = list(CRISIS_KEYWORDS.keys())
 
 # ==========================================
 # 3. 🔗 데이터 수집 URLs (네이버 금융)
@@ -92,6 +109,7 @@ SYSTEM_ROLE = """
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 OPENDART_API_KEY = os.environ.get("OPENDART_API_KEY")
+DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY") # 공공데이터포털
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 if not GOOGLE_API_KEY:

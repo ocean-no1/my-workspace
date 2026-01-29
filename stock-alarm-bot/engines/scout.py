@@ -1,10 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
+from pykrx import stock
+import time
 import yfinance as yf
 import pandas as pd
 import config
 from datetime import datetime, timedelta
 import re
+
+import pandas_datareader.data as pdr
 
 class Scout:
     """
@@ -22,13 +26,44 @@ class Scout:
         """
         print(f"🕵️ Scout: 정찰 임무 시작... (Time: {datetime.now().strftime('%H:%M:%S')})")
         
+        # [V16.8] SNR Calculation
+        risk = self.get_risk_indices()
+        pulse = self.calculate_pulse_score()
+        
+        try:
+            vix_slope = float(risk.get("VIX_Slope", 0)) # dZ/dt (Acceleration of Impact)
+            pulse_score = float(pulse.get("score", 0))
+            
+            # [Math Formula V16.10]
+            # SNR = (Pulse * dZ/dt) / sigma_noise
+            AVG_NOISE_INTENSITY = 1.0 # sigma_noise (Historical Average)
+            
+            # Pulse가 0일 경우를 대비해 최소 0.5 보정 (Silent Crisis 방지)
+            adjusted_pulse = max(pulse_score, 0.5)
+            
+            # Calculate SNR
+            snr = (adjusted_pulse * abs(vix_slope)) / AVG_NOISE_INTENSITY
+            
+            # 방향성 보정: Slope가 음수면 SNR도 음수로 표기 (Crisis Fading)
+            if vix_slope < 0:
+                snr = -snr
+        except:
+            snr = 0.0
+
         data = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "risk_indices": risk,
+            "pulse_score": pulse,
+            "snr": f"{snr:.2f}", # [V16.8] 신호 대 소음비
+            "market_index": self.get_korea_market_index(),
             "macro": self.get_macro_data(macros),
             "players": self.get_players_data(),
             "policy_news": self.get_policy_news(),
-            "micro": self.get_micro_data(sectors)
+            "micro": self.get_micro_data(sectors),
+            "safe_haven_data": self.get_micro_data({"Defensive Assets": config.SAFE_HAVEN_TICKERS})
         }
         
+        print(f"  - [SNR Analysis] Score: {snr:.2f} (Pulse: {pulse.get('score')}, Slope: {risk.get('VIX_Slope')})")
         print("✅ Scout: 정찰 임무 완료.")
         return data
 
@@ -95,96 +130,268 @@ class Scout:
         except Exception as e:
              print(f"    ⚠️ 머니무브 수집 실패: {e}")
              
+
+        return data
+
         return result
 
+    def get_risk_indices(self):
+        """
+        [V16.5] Global Risk Indices (EPU, VIX Z-Score, GPR Proxy)
+        """
+        print("  - [Plus] 글로벌 리스크 지표(EPU, VIX, GPR) 정밀 분석 중...")
+        result = {"EPU": "N/A", "VIX": "N/A", "VIX_Z": "0.0", "GPR": "N/A"}
+        
+        # 1. US Economic Policy Uncertainty Index (FRED)
+        try:
+            start = datetime.now() - timedelta(days=60)
+            end = datetime.now()
+            epu_data = pdr.DataReader('USEPUINDXD', 'fred', start, end)
+            if not epu_data.empty:
+                result["EPU"] = f"{epu_data.iloc[-1].item():.2f}"
+        except Exception as e:
+            print(f"    ⚠️ EPU 수집 실패: {e}")
+
+        # 2. VIX Z-Score (yfinance)
+        try:
+            vix = yf.Ticker("^VIX")
+            # 30일 데이터 확보 (Z-Score 계산용)
+            hist = vix.history(period="3mo") # 넉넉히 3개월
+            if len(hist) >= 30:
+                 # Rolling Window로 구현하면 좋으나, 단순화를 위해 전체기간 Mean/Std 사용하되
+                 # 최근 데이터 변화를 반영
+                recent = hist['Close']
+                
+                # Z-Score Calculation
+                mean_vix = recent.mean()
+                std_vix = recent.std()
+                
+                current_vix = recent.iloc[-1]
+                prev_vix = recent.iloc[-2]
+                prev2_vix = recent.iloc[-3]
+                
+                z_current = (current_vix - mean_vix) / std_vix if std_vix != 0 else 0
+                z_prev = (prev_vix - mean_vix) / std_vix if std_vix != 0 else 0
+                z_prev2 = (prev2_vix - mean_vix) / std_vix if std_vix != 0 else 0
+                
+                # Vp (Velocity)
+                velocity_current = z_current - z_prev
+                velocity_prev = z_prev - z_prev2
+                
+                # Ap (Acceleration)
+                acceleration = velocity_current - velocity_prev
+                
+                result["VIX"] = f"{current_vix:.2f}"
+                result["VIX_Z"] = f"{z_current:.2f}"
+                result["VIX_Slope"] = f"{velocity_current:.2f}" # Vp
+                result["VIX_Accel"] = f"{acceleration:.2f}" # Ap
+        except Exception as e:
+            print(f"    ⚠️ VIX 수집 실패: {e}")
+
+        # 3. GPR Proxy (News Keyword Velocity)
+        result["GPR_Proxy"] = self.get_gpr_proxy()
+            
+        return result
+
+    def get_gpr_proxy(self):
+        """
+        [V16.5] 정치 리스크 프록시 (Risk Velocity)
+        - 특정 키워드(계엄, 탄핵 등)의 뉴스 출현 빈도 체크
+        """
+        keywords = ['계엄', '내란', '탄핵', 'ICE', 'FBI 수색', '부정선거']
+        hit_count = 0
+        
+        base_url = "https://search.naver.com/search.naver?where=news&sort=1&query="
+        
+        for kw in keywords:
+            try:
+                res = requests.get(base_url + kw, headers=self.headers, timeout=3)
+                if res.status_code == 200:
+                    soup = BeautifulSoup(res.text, "html.parser")
+                    # 뉴스 리스트 아이템 개수 (최대 10개) 카운트
+                    # 'news_area'는 각 뉴스 아이템의 클래스
+                    items = soup.select("div.news_area")
+                    
+                    # 간단한 로직: 상위 10개 중 '1시간 이내' 기사가 몇 개인지 체크하면 좋으나
+                    # 여기서는 단순 검색 결과 노출 여부로 판단 (각 키워드 당 최대 1점)
+                    if items:
+                        hit_count += 1
+            except:
+                continue
+                
+        # Risk Level Logic
+        risk_level = "Stable"
+        if hit_count >= 3:
+            risk_level = "CRITICAL (Political Shock)"
+        elif hit_count >= 1:
+            risk_level = "Warning"
+            
+        return {"score": hit_count, "status": risk_level}
+
+    def calculate_pulse_score(self):
+        """
+        [V16.6] Pulse Layer: 뉴스 센티먼트 점수화
+        - 위기 단어(2.0) vs 일반 단어(0.5) 가중치 합산
+        """
+        print("  - [Plus] Pulse Score (News Sentiment) 계산 중...")
+        total_score = 0.0
+        details = []
+        
+        keywords = config.CRISIS_KEYWORDS if hasattr(config, 'CRISIS_KEYWORDS') else {}
+        base_url = "https://search.naver.com/search.naver?where=news&sort=1&query="
+        
+        for kw, weight in keywords.items():
+            try:
+                # 단순 검색 노출 여부 확인 (빠른 속도를 위해 timeout 짧게)
+                res = requests.get(base_url + kw, headers=self.headers, timeout=2)
+                if res.status_code == 200:
+                    soup = BeautifulSoup(res.text, "html.parser")
+                    if soup.select("div.news_area"):
+                        total_score += weight
+                        details.append(kw)
+            except:
+                 continue
+                 
+        return {"score": total_score, "matches": ", ".join(details[:5])} # 상위 5개만 표기
+
+    # -------------------------------------------------------------------------
+    # 기존 메소드들 (get_macro_data 등) 유지...
+        """
+        [공공데이터포털] 국내 지수 시세 (KOSPI, KOSDAQ)
+        """
+        print("  - [Plus] 국내 지수(KOSPI/KOSDAQ) 확인 중...")
+        data = {"KOSPI": {"price": "0", "change": "0"}, "KOSDAQ": {"price": "0", "change": "0"}}
+        
+        api_key = config.DATA_GO_KR_API_KEY
+        if not api_key:
+            return data
+
+        base_url = "https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarketIndex"
+        # 최근 영업일 데이터 확보를 위해 오늘~3일 전까지 조회 (최근 데이터 획득용)
+        # today = datetime.now().strftime("%Y%m%d") # Unused variable removed
+        
+        # basDt는 필수. 주말 고려하여 최근 평일로 설정
+        # 단, API 특성상 정확한 날짜를 모르면 루프를 돌거나 범위를 줘야 하는데, 
+        # numOfRows=10 & resultType=json으로 최근 데이터가 상위에 오는지 확인 필요.
+        # 공공데이터포털은 보통 basDt를 지정해야 함. 어제 날짜로 시도.
+        
+        target_date = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+        if datetime.now().weekday() == 0: # 월요일이면 금요일 데이터
+            target_date = (datetime.now() - timedelta(days=3)).strftime("%Y%m%d")
+        elif datetime.now().weekday() == 6: # 일요일이면 금요일
+            target_date = (datetime.now() - timedelta(days=2)).strftime("%Y%m%d")
+
+        params = {
+            "serviceKey": api_key,
+            "resultType": "json",
+            "numOfRows": "10",
+            "basDt": target_date
+        }
+        
+        try:
+            res = requests.get(base_url, params=params, timeout=5)
+            if res.status_code == 200:
+                try:
+                    items = res.json().get("response", {}).get("body", {}).get("items", {}).get("item", [])
+                    for item in items:
+                        name = item.get("idxNm")
+                        price = item.get("clpr") # 종가
+                        flt = item.get("fltRt") # 등락률
+                        
+                        if name == "코스피":
+                            data["KOSPI"] = {"price": price, "change": flt, "date": item.get("basDt")}
+                        elif name == "코스닥":
+                            data["KOSDAQ"] = {"price": price, "change": flt, "date": item.get("basDt")}
+                except:
+                    pass
+            elif res.status_code == 403:
+                print("    ⚠️ 공공데이터포털 접근 권한 없음 (활용신청 필요)")
+        except Exception as e:
+            print(f"    ⚠️ 지수 데이터 수집 실패: {e}")
+            
+        return data
+
+    # 상단 import 추가는 별도 처리하지 않고, 여기서 메소드 교체만 수행
+    # (import는 multi-replace 또는 별도 호출로 처리해야 하므로, 이 도구 호출에서는 메소드 본문만 교체하고
+    #  import 문은 파일 상단에 추가해야 함. 하지만 replace_file_content는 한 번에 하나의 블록만 수정 가능.
+    #  따라서 여기서는 메소드를 교체하고, 다음 호출에서 import를 추가하겠음.)
+    
     def get_players_data(self):
         """
-        임무 2: 수급 전투 현황 (투자자별 매매동향 + 프로그램, 주간 vs 지난주 비교)
+        [수급 데이터 수집]
+        네이버 크롤링 차단 시 대안: PyKRX (한국거래소 데이터) 사용
         """
-        print("  - [2/4] 수급 데이터 정밀 타격 중...")
-        result = {}
-        
-        # 2-1. 투자자별 매매동향
         try:
-            url = config.URLS["INVESTOR_TREND"]
-            res = requests.get(url, headers=self.headers)
+            today = datetime.now()
+            today_str = today.strftime("%Y%m%d")
             
-            # StringIO로 감싸기 (Pandas FutureWarning 해결)
-            from io import StringIO
-            html_io = StringIO(res.text)
+            # 요일 계산 (0:월 ~ 6:일)
+            idx = today.weekday()
             
-            # 테이블 추출 (class="type_1"이 없을 수도 있으므로 유연하게)
-            # "날짜" 텍스트가 포함된 테이블을 찾도록 변경
-            df_list = pd.read_html(html_io, match="날짜", flavor='bs4')
+            # 날짜 범위 설정 (YYYYMMDD 포맷)
+            # 1. 이번주 (월요일 ~ 오늘)
+            this_week_start_dt = today - timedelta(days=idx)
+            this_week_start = this_week_start_dt.strftime("%Y%m%d")
+            this_week_end = today_str
             
-            if df_list:
-                df = df_list[0]
-                # 컬럼: 날짜, 개인, 외국인, 기관계, ...
-                # 데이터 정제 (NaN 제거)
-                df = df.dropna()
-                
-                # 날짜 기준 이번주/지난주 나누기
-                today = datetime.now().date()
-                start_of_this_week = today - timedelta(days=today.weekday()) # 월요일
-                start_of_last_week = start_of_this_week - timedelta(days=7)
-                end_of_last_week = start_of_this_week - timedelta(days=1) # 지난주 일요일(또는 금요일)
-                
-                # 날짜 포맷 확인 (예: '24.01.30')
-                # 여기서는 간단히 상위 5개(이번주), 그 다음 5개(지난주) 보는 로직으로 대체 가능하지만,
-                # 정석대로 날짜 파싱 시도
-                
-                current_week_sum = {"개인": 0, "외국인": 0, "기관": 0}
-                last_week_sum = {"개인": 0, "외국인": 0, "기관": 0}
-                
-                for _, row in df.iterrows():
-                    try:
-                        date_str = str(row.iloc[0]) # 날짜
-                        # 연도 추가 필요할 수 있음 (네이버는 yy.mm.dd)
-                        if len(date_str) == 8: # 24.01.01
-                            dt = datetime.strptime(date_str, "%y.%m.%d").date()
-                            
-                            # 수치 변환 (문자열 -> 정수)
-                            def parse_money(val):
-                                if isinstance(val, (int, float)): return val
-                                return int(str(val).replace(",", ""))
-                                
-                            personal = parse_money(row.iloc[1])
-                            foreigner = parse_money(row.iloc[2])
-                            institution = parse_money(row.iloc[3])
-                            
-                            if start_of_this_week <= dt <= today:
-                                current_week_sum["개인"] += personal
-                                current_week_sum["외국인"] += foreigner
-                                current_week_sum["기관"] += institution
-                            elif start_of_last_week <= dt <= end_of_last_week:
-                                last_week_sum["개인"] += personal
-                                last_week_sum["외국인"] += foreigner
-                                last_week_sum["기관"] += institution
-                    except:
-                        continue
-                        
-                result["this_week"] = current_week_sum
-                result["last_week"] = last_week_sum
-                
+            # 2. 지난주 (지난주 월 ~ 지난주 금)
+            last_week_end_dt = this_week_start_dt - timedelta(days=3) # 지난주 금요일 (월-3일)
+            last_week_start_dt = last_week_end_dt - timedelta(days=4) # 지난주 월요일 (금-4일)
+            
+            last_week_start = last_week_start_dt.strftime("%Y%m%d")
+            last_week_end = last_week_end_dt.strftime("%Y%m%d")
+
+            # KRX에서 기간별 투자자 순매수 데이터 조회 (코스피 전체)
+            # IP 차단 등으로 데이터가 비어있을 경우 대비
+            try:
+                from pykrx import stock
+                df_this = stock.get_market_trading_value_by_date(this_week_start, this_week_end, "KOSPI")
+                df_last = stock.get_market_trading_value_by_date(last_week_start, last_week_end, "KOSPI")
+            except Exception as e:
+                print(f"    ⚠️ PyKRX 접속 실패: {e}")
+                df_this = pd.DataFrame()
+                df_last = pd.DataFrame()
+
+            # 데이터가 비어있을 경우 (장 시작 전 또는 차단됨) 0으로 처리
+            if df_this.empty:
+                this_foreign = 0
+                this_inst = 0
+                this_ant = 0
+            else:
+                try:
+                    # 억 원 단위로 변환
+                    this_foreign = int(df_this['외국인'].sum() / 100000000)
+                    this_inst = int(df_this['기관합계'].sum() / 100000000)
+                    this_ant = int(df_this['개인'].sum() / 100000000)
+                except:
+                    this_foreign = 0; this_inst = 0; this_ant = 0
+
+            if df_last.empty:
+                last_foreign = 0
+                last_inst = 0
+                last_ant = 0
+            else:
+                try:
+                    last_foreign = int(df_last['외국인'].sum() / 100000000)
+                    last_inst = int(df_last['기관합계'].sum() / 100000000)
+                    last_ant = int(df_last['개인'].sum() / 100000000)
+                except:
+                    last_foreign = 0; last_inst = 0; last_ant = 0
+
+            return {
+                "this_week": {'foreign': this_foreign, 'inst': this_inst, 'ant': this_ant},
+                "last_week": {'foreign': last_foreign, 'inst': last_inst, 'ant': last_ant},
+                "d_day": idx + 1
+            }
+
         except Exception as e:
-            print(f"    ⚠️ 매매동향 수집 실패: {e}")
-            result["error"] = str(e)
-
-        # 2-2. 프로그램 매매 (비차익)
-        try:
-            url = config.URLS["PROGRAM_TRADE"]
-            res = requests.get(url, headers=self.headers)
-            soup = BeautifulSoup(res.text, "html.parser")
-            
-            # 당일 프로그램 매매 동향 파싱
-            # (상단 요약 박스 또는 테이블에서 '비차익' 순매수 찾기)
-            # dl.blind 구조 등을 사용하거나 테이블 접근
-            # 여기서는 편의상 생략된 로직을 보완 -> 테이블에서 최상단 행 추출
-            pass 
-        except:
-             pass
-
-        return result
+            print(f"⚠️ KRX 데이터 수집 실패: {e}")
+            return {
+                "this_week": {'foreign': 0, 'inst': 0, 'ant': 0},
+                "last_week": {'foreign': 0, 'inst': 0, 'ant': 0},
+                "d_day": 0,
+                "error": str(e)
+            }
 
     def get_policy_news(self):
         """

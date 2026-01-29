@@ -12,7 +12,25 @@ def get_report_by_time():
     - Scout: 데이터 수집 (전체 섹터 + 매크로)
     - Brain: 분석 및 글쓰기
     """
-    print(f"🚀 Stock Alarm Bot 시작 (Time: {datetime.datetime.now()})")
+import logging
+
+# 로깅 설정 (파일 및 콘솔 출력)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("bot.log", encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+def get_report_by_time():
+    """
+    시간대별 리포트 생성 로직
+    - Scout: 데이터 수집 (전체 섹터 + 매크로)
+    - Brain: 분석 및 글쓰기
+    """
+    logging.info(f"🚀 Stock Alarm Bot 시작 (Time: {datetime.datetime.now()})")
 
     # Scout와 Brain 초기화
     scout = Scout()
@@ -21,16 +39,17 @@ def get_report_by_time():
         brain = Brain()
         ai_available = True
     except Exception as e:
-        print(f"⚠️ AI 초기화 실패 ({e}). 기본 리포트로 전환합니다.")
+        logging.error(f"⚠️ AI 초기화 실패 ({e}). 기본 리포트로 전환합니다.")
         ai_available = False
 
     # 1. 데이터 수집 (섹터 전체 + 매크로)
     # config에 정의된 SECTORS와 MACRO_TICKERS를 모두 전달
     market_data = scout.collect_data(config.SECTORS, config.MACRO_TICKERS)
+    logging.info("데이터 수집 완료")
     
     # 2. 리포트 생성
     if ai_available:
-        print("🧠 Brain: AI 분석 시작...")
+        logging.info("🧠 Brain: AI 분석 시작...")
         report = brain.analyze_market(market_data)
     else:
         # AI 사용 불가 시 간단 요약 (Fallback)
@@ -68,15 +87,26 @@ def get_report_by_time():
                     else:
                         report += f"  {name}: {data}\n"
         report += "```"
+        logging.warning("AI 분석 실패로 기본 리포트 생성됨")
 
     return report
 
 if __name__ == "__main__":
     try:
+        # [Heartbeat] 생존 신고
+        start_msg = f"🚀 **[System Start]** Stock Alarm Bot V16.1 가동 시작\n- Env: {'Cloud (GitHub)' if os.environ.get('GITHUB_ACTIONS') else 'Local'}\n- Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        send_message(start_msg)
+
         final_report = get_report_by_time()
-        print("📨 텔레그램 전송 중...")
+        logging.info("📨 텔레그램 전송 중...")
         send_message(final_report)
-        print("✅ 모든 작업 완료.")
+        logging.info("✅ 모든 작업 완료.")
         
     except Exception as e:
-        print(f"❌ 치명적 오류 발생: {e}")
+        error_msg = f"❌ 치명적 오류 발생: {e}"
+        logging.critical(error_msg)
+        # 텔레그램으로 에러 알림 전송 (가능한 경우)
+        try:
+            send_message(f"⚠️ **[Bot Error]** 봇 가동 중 에러 발생:\n{str(e)}")
+        except:
+            pass
