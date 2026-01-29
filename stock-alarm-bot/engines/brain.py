@@ -63,7 +63,7 @@ class Brain:
            - **$A_p$ (Acceleration)**: 'VIX_Accel' (Change in Speed).
 
         2. **Math Defense (SNR Formula)**:
-           - **Formula**: $SNR = \\frac{Pulse \\times \\frac{dZ}{dt}}{\\sigma_{noise}}$
+           - **Formula**: $SNR = \\frac{{Pulse \\times \\frac{{dZ}}{{dt}}}}{{\\sigma_{{noise}}}}$
            - **Interpretation**: 
              - **SNR > 3.0**: "🚨 SYSTEM CRISIS". This is NOT noise. Structural.
              - **SNR < 1.0**: "🔊 NOISE". Market is overreacting. ($dZ/dt$ is low).
@@ -78,12 +78,39 @@ class Brain:
         5. **Investment Criteria (Dynamic Gates)**:
            - **Contrarian Trigger**: If (Scenario A) AND (SNR < 1.0) -> **"Be Greedy."**
 
-        [Output Format (Telegram HTML)]
-        - **Header**: `[Risk Status] L1:{{Signal}} | SNR:{{Value}} | Ap:{{Value}}`
-        - **Flash Report**: Analyze VIX Velocity($V_p$) & Acceleration($A_p$).
+        [Output Format (The Commander's Live Terminal)]
+        **📊 [Market-Eye Live Terminal]**
+        📅 {{Date}} | 장전 실시간 브리핑
+
+        **1️⃣ Macro: 전장 환경 (Environment)**
+        `[Risk Status] L1:{{Signal}} | SNR:{{Value}} | Ap:{{Value}}`
+        
+        **🚰 금리 구조 & 유동성**
+        - **Yield Curve**: Analyze 10Y(Economy) vs 2Y(Liquidity).
+        
+        **💰 대체 자산 & 파이프라인**
+        - **🚨 환율**: {{USD/KRW}} (Gate Check: 1410)
         - **Action Plan**:
-          - If Scenario A: "🦅 **STRONG BUY**: Panic is decelerating fast."
-          - If Scenario C: "🔥 **CRASH**: Acceleration detected."
-          - If 1420+ Gate: "⛔ **CURRENCY CRISIS**: Cash Defense."
-        - **Deep Dive**: Sector/Safe Haven Analysis.
+          - If SNR > 3.0: "🚨 **SYSTEM FAILURE**: EVACUATE to {{SafeHaven}}."
+          - If SNR < 1.0 (Scenario A): "🦅 **STRONG BUY**: Panic is decelerating ($A_p < 0$)."
+          - If 1410+ Gate: "⛔ **CURRENCY CRISIS**: Cash Defense."
+
+        **2️⃣ Players: 수급 전투 현황**
+        `(Volume & Hybrid Latency Analysis)`
+        - **👮 외국인**: {{NetBuy}} (Check $V_p$ & Flash L1)
+        - **🏦 기 관**: {{NetBuy}}
+        - **🐜 개 인**: {{NetBuy}}
+        - **Behavior**: Analyze if Foreigner flows match valid Signals or Noise.
+
+        **3️⃣ Policy: 쌍끌이 레이더 (AI News Analysis)**
+        `[Pulse Score]: {{Score}} (Sentiment Impact)`
+        - **A. 🇰🇷 Korea Discount**: (Tax/Regulation/ValueUp)
+        - **B. 🌏 Geopolitics**: (US/China/Russia/Japan)
+
+        **4️⃣ Micro: 4대 섹터 정밀 타격 (Master's View)**
+        *(Evaluated by GPM/OPM/ROE & Moat)*
+        - **💾 반도체**: {{Analysis}}
+        - **🛡️ K-Heavy**: {{Analysis}}
+        - **💄 K-Culture**: {{Analysis}}
+        - **🚗 모빌리티**: {{Analysis}}
         """
