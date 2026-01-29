@@ -1,4 +1,5 @@
 import os
+import sys
 import datetime
 import pytz
 import config
@@ -110,3 +111,4 @@ if __name__ == "__main__":
             send_message(f"⚠️ **[Bot Error]** 봇 가동 중 에러 발생:\n{str(e)}")
         except:
             pass
+        sys.exit(1) # GitHub Actions를 실패(Red) 상태로 종료
